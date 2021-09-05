@@ -1,0 +1,13 @@
+{
+  "name": "zombies",
+  "version": "1.0.0",
+  "description": "Zombie shooting game",
+  "scripts": {
+    "watch_games": "light-server -s src -w \"src/main.js # # reload\""
+  },
+  "author": "Didier Marin",
+  "license": "MIT",
+  "devDependencies": {
+    "light-server": "^2.7.0"
+  }
+}
