@@ -33,14 +33,17 @@ const G = {
 
 	Z_INIT_NB: 5,
 	Z_MAX_NB: 50,
-	Z_SPD_MIN: 0.5,
-	Z_SPD_MAX: 1.0,
+	Z_SPD_MIN: 0.1,
+	Z_SPD_MAX: 0.5,
 	Z_SPD_RATE: 0.3,
 	Z_SPAWN_DISTANCE: 0.8,
 	Z_SPAWN_RATE: 30,
-	Z_AGGRO_MIN: 0.1,
-	Z_AGGRO_MAX: 0.3,
-	Z_AGGRO_RATE: 0.2,
+
+	AGGRO_MIN: 0.1,
+	AGGRO_MAX: 0.5,
+	AGGRO_UPDATE_RATE: 0.01,
+	AGGRO_COOLDOWN_RATE: 0.01,
+	AGGRO_SHOOT_INCR: 0.2,
 }
 
 options = {
@@ -61,8 +64,16 @@ let zombies
 
 /**
  * @typedef {{
+ * targetSize: number
+ * currentSize: number
+ * }} AggroZone
+ */
+
+/**
+ * @typedef {{
  * pos: Vector,
- * firingCooldown: number,
+ * firingCooldown: number
+ * aggroZone: AggroZone
  * }} Player
  */
 
@@ -98,10 +109,18 @@ function generateZombie() {
 	return { pos: pos, is_aggro: false }
 }
 
-function aggro_distance() {
-	let ratio = G.Z_AGGRO_MIN + (difficulty - 1) * G.Z_AGGRO_RATE
-	if(ratio > G.Z_AGGRO_MAX) ratio = G.Z_AGGRO_MAX
-	return ratio * G.WIDTH
+function aggro_distance(aggroZone) {
+	let _size = aggroZone.currentSize
+	if(_size > G.AGGRO_MAX) _size = G.AGGRO_MAX
+	return _size * G.WIDTH
+}
+
+function update_aggro_zone(aggroZone) {
+	if(aggroZone.targetSize > G.AGGRO_MIN) {
+		aggroZone.targetSize -= G.AGGRO_COOLDOWN_RATE
+	}
+    aggroZone.currentSize +=
+		(aggroZone.targetSize - aggroZone.currentSize) * G.AGGRO_UPDATE_RATE
 }
 
 function zombie_speed() {
@@ -118,6 +137,10 @@ function update() {
 		player = {
             pos: vec(G.WIDTH * 0.5, G.HEIGHT * 0.5),
             firingCooldown: G.PLAYER_FIRE_RATE,
+			aggroZone: {
+				currentSize: G.AGGRO_MIN,
+				targetSize: G.AGGRO_MIN,
+			}
         }
 
         fBullets = []
@@ -126,13 +149,14 @@ function update() {
     // Debug
 	color("light_black")
 	text(zombies.length.toString(), 3, 10)
-	// text(fBullets.length.toString(), 3, 20)
-	// text(zombie_speed().toString(), 3, 30)
 
+	// AggroZone
     color("light_black")
-	arc(player.pos.x, player.pos.y, aggro_distance(), 1, 0, 2*PI)
+	update_aggro_zone(player.aggroZone)
+	const aggro_dist = aggro_distance(player.aggroZone)
+	arc(player.pos.x, player.pos.y, aggro_dist, 1, 0, 2*PI)
 
-	// Player
+    // Player
 	player.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
 	player.firingCooldown--
 	if (player.firingCooldown <= 0 && input.isJustPressed) {
@@ -142,6 +166,7 @@ function update() {
 			dir: dir,
 		})
 		player.firingCooldown = G.PLAYER_FIRE_RATE
+		player.aggroZone.targetSize += G.AGGRO_SHOOT_INCR
 
 		color("light_black")
 		particle(
@@ -156,6 +181,11 @@ function update() {
 	}
 	color ("black")
 	char("a", player.pos)
+	// Laser
+	color ("light_red")
+	const p = vec(G.WIDTH * 2, 0).rotate(player.pos.angleTo(input.pos))
+	line(player.pos.x, player.pos.y, player.pos.x + p.x, player.pos.y + p.y, 1)
+
 
 	// Bullets
 	remove(fBullets, (fb) => {
@@ -171,7 +201,7 @@ function update() {
 
 	// Zombies
 	remove(zombies, (z) => {
-		if(player.pos.distanceTo(z.pos) < aggro_distance()) {
+		if(player.pos.distanceTo(z.pos) < aggro_dist) {
 			z.is_aggro = true
 			play("lucky")
 		}
