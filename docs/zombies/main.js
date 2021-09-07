@@ -16,14 +16,23 @@ llllll
 ll  ll
 `,
 `
-  ll  
- l  l
   ll 
+ l  l
+  ll
 llllll
  llll
 ll  ll
-`
+`,
 ]
+
+/**
+ * Value that increases from min to max at the speed of rate per second
+ * @typedef {{
+ * min: number
+ * max: number
+ * rate: number
+ * }} Gauge
+ */
 
 const G = {
 	WIDTH: 150,
@@ -33,25 +42,45 @@ const G = {
 	PLAYER_SHOW_LASER: true,
 	LONGPRESS_THRESHOLD: 20,
 
-    FBULLET_SPEED: 3,
+    BULLET_SPEED: 3,
 
 	Z_INIT_NB: 5,
 	Z_MAX_NB: 50,
-	Z_SPD_MIN: 0.1,
-	Z_SPD_MAX: 0.5,
-	Z_SPD_RATE: 0.3,
+	Z_SPD: {
+		min: 0.1,
+		max: 0.5,
+		rate: 0.0013333, // reach max after ~5 min
+	},
 	Z_SPAWN_DISTANCE: 0.8,
 	Z_SPAWN_RATE: 30,
-	Z_SPAWN_AGGRO_PROBA_MIN: 0.0,
-	Z_SPAWN_AGGRO_PROBA_MAX: 0.2,
-	Z_SPAWN_AGGRO_PROBA_RATE: 0.04,
+
+	/**
+	 * @type Gauge
+	 */
+	Z_SPAWN_AGGRO_PROBA: {
+		min: 0.0,
+	    max: 0.2,
+	    rate: 0.0007, // reach max after ~5 min
+	},
 
 	AGGRO_MIN: 0.1,
 	AGGRO_MAX: 0.5,
 	AGGRO_UPDATE_RATE: 0.01,
 	AGGRO_COOLDOWN_RATE: 0.01,
 	AGGRO_SHOOT_INCR: 0.2,
+
+	/**
+	 * @type SoundEffectType
+	 */
 	AGGRO_SOUND: "jump",
+	/**
+	 * @type SoundEffectType
+	 */
+	FIRING_SOUND: "laser",
+	/**
+	 * @type SoundEffectType
+	 */
+	BULLET_HIT_SOUND: "hit",
 }
 
 options = {
@@ -100,58 +129,15 @@ let player
  * @typedef {{
  * pos: Vector
  * dir: number
- * }} FBullet
+ * }} Bullet
  */
 
 /**
- * @type { FBullet [] }
+ * @type { Bullet [] }
  */
-let fBullets
+let bullets
 
 let lastJustPressed
-
-function isOutsideScreen(pos) {
-	return pos.y < 0
-		|| pos.y > G.HEIGHT
-		|| pos.x < 0
-		|| pos.x > G.WIDTH
-}
-
-function generateZombie() {
-	const angle = rnd(2*PI)
-	const distance = rnd(G.Z_SPAWN_DISTANCE, 1.0) * (G.WIDTH / 2)
-	let pos = vec(distance, 0).rotate(angle).add(G.WIDTH * 0.5, G.HEIGHT * 0.5)
-	pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
-	const is_aggro = rnd(1) < spawn_aggro_proba()
-	if (is_aggro) play(G.AGGRO_SOUND)
-	return { pos: pos, is_aggro: is_aggro }
-}
-
-function spawn_aggro_proba() {
-	let p = G.Z_SPAWN_AGGRO_PROBA_MIN + (difficulty - 1) * G.Z_SPAWN_AGGRO_PROBA_RATE
-	if(p > G.Z_SPAWN_AGGRO_PROBA_MAX) p = G.Z_SPAWN_AGGRO_PROBA_MAX
-	return p
-}
-
-function aggro_distance(aggroZone) {
-	let _size = aggroZone.currentSize
-	if(_size > G.AGGRO_MAX) _size = G.AGGRO_MAX
-	return _size * G.WIDTH
-}
-
-function update_aggro_zone(aggroZone) {
-	if(aggroZone.targetSize > G.AGGRO_MIN) {
-		aggroZone.targetSize -= G.AGGRO_COOLDOWN_RATE
-	}
-    aggroZone.currentSize +=
-		(aggroZone.targetSize - aggroZone.currentSize) * G.AGGRO_UPDATE_RATE
-}
-
-function zombie_speed() {
-	let spd = G.Z_SPD_MIN + (difficulty - 1) * G.Z_SPD_RATE
-	if(spd > G.Z_SPD_MAX) spd = G.Z_SPD_MAX
-	return spd
-}
 
 function update() {
     // The init function running at startup
@@ -187,7 +173,7 @@ function init() {
 		}
 	}
 
-	fBullets = []
+	bullets = []
 }
 
 function update_player() {
@@ -225,7 +211,8 @@ function update_player() {
 	// Laser
 	if(G.PLAYER_SHOW_LASER) {
 		color ("light_red")
-		const p = vec(G.WIDTH * 2, 0).rotate(player.pos.angleTo(input.pos))
+		const angle = player.pos.angleTo(input.pos)
+		const p = vec(0, 0).addWithAngle(angle, G.WIDTH * 2)
 		line(player.pos.x, player.pos.y, player.pos.x + p.x, player.pos.y + p.y, 1)
 	}
 }
@@ -234,7 +221,7 @@ function fireSingle() {
 	if (player.firingCooldown > 0) return
 
 	let dir = player.pos.angleTo(input.pos)
-	fBullets.push({
+	bullets.push({
 		pos: vec(player.pos.x, player.pos.y),
 		dir: dir,
 	})
@@ -250,7 +237,7 @@ function fireSingle() {
 		dir,
 		PI/4
 	)
-	play("laser")
+	play(G.FIRING_SOUND)
 }
 
 function startBurst() {
@@ -262,7 +249,7 @@ function startBurst() {
 
 function fireBurst() {
 	let dir = player.pos.angleTo(input.pos)
-	fBullets.push({
+	bullets.push({
 		pos: vec(player.pos.x, player.pos.y),
 		dir: dir + rnds(PI/16),
 	})
@@ -278,23 +265,22 @@ function fireBurst() {
 		dir,
 		PI/4
 	)
-	play("laser")
+	play(G.FIRING_SOUND)
 }
 
 function update_bullets() {
-	remove(fBullets, (fb) => {
-		let upd = vec(G.FBULLET_SPEED, 0).rotate(fb.dir)
-		fb.pos.x += upd.x
-		fb.pos.y += upd.y
+	remove(bullets, (b) => {
+		b.pos.addWithAngle(b.dir, G.BULLET_SPEED)
 		
 		color("yellow")
-		bar(fb.pos.x, fb.pos.y, 3, 2, fb.dir)
+		bar(b.pos.x, b.pos.y, 3, 2, b.dir)
 
-		return isOutsideScreen(fb.pos)
+		return isOutsideScreen(b.pos)
 	})
 }
 
 function update_zombies() {
+	const spd = zombie_speed()
 	const aggro_dist = aggro_distance(player.aggroZone)
 	remove(zombies, (z) => {
 		if(player.pos.distanceTo(z.pos) < aggro_dist && ! z.is_aggro) {
@@ -304,22 +290,21 @@ function update_zombies() {
 
 		if(z.is_aggro) {
 			const dir = z.pos.angleTo(player.pos)
-			z.pos.add(vec(zombie_speed(), 0).rotate(dir))
+			z.pos.addWithAngle(dir, spd)
 			color("light_red")
 		} else {
-			z.pos.y += rnds(zombie_speed())
-			z.pos.x += rnds(zombie_speed())
+			z.pos.addWithAngle(rnd(2*PI), spd)
 			color("green")
 		}
         z.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
 
 		const col = char("b", z.pos)
 
-        const isCollidingWithFBullets = col.isColliding.rect.yellow
-        if (isCollidingWithFBullets) {
+        const isCollidingWithBullets = col.isColliding.rect.yellow
+        if (isCollidingWithBullets) {
             color("red")
             particle(z.pos)
-			play("hit")
+			play(G.BULLET_HIT_SOUND)
 			addScore(1)
         }
 
@@ -327,9 +312,56 @@ function update_zombies() {
 		if (isCollidingWithPlayer) end()
         
         // Also another condition to remove the object
-        return (isCollidingWithFBullets || isOutsideScreen(z.pos))
+        return (isCollidingWithBullets || isOutsideScreen(z.pos))
     })
 	if (ticks % G.Z_SPAWN_RATE == 0 && zombies.length < G.Z_MAX_NB) {
 		zombies.push(generateZombie())
     }
+}
+
+function generateZombie() {
+	const angle = rnd(2*PI)
+	const distance = rnd(G.Z_SPAWN_DISTANCE, 1.0) * (G.WIDTH / 2)
+	let pos = vec(G.WIDTH * 0.5, G.HEIGHT * 0.5).addWithAngle(angle, distance)
+	pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
+	const is_aggro = rnd(1) < spawn_aggro_proba()
+	if (is_aggro) play(G.AGGRO_SOUND)
+	return { pos: pos, is_aggro: is_aggro }
+}
+
+function spawn_aggro_proba() {
+	return scale_with_difficulty(G.Z_SPAWN_AGGRO_PROBA)
+}
+
+function aggro_distance(aggroZone) {
+	let _size = aggroZone.currentSize
+	if(_size > G.AGGRO_MAX) _size = G.AGGRO_MAX
+	return _size * G.WIDTH
+}
+
+function update_aggro_zone(aggroZone) {
+	if(aggroZone.targetSize > G.AGGRO_MIN) {
+		aggroZone.targetSize -= G.AGGRO_COOLDOWN_RATE
+	}
+    aggroZone.currentSize +=
+		(aggroZone.targetSize - aggroZone.currentSize) * G.AGGRO_UPDATE_RATE
+}
+
+function zombie_speed() {
+	return scale_with_difficulty(G.Z_SPD)
+}
+
+// Generic utils
+
+function scale_with_difficulty(gauge) {
+	let value = gauge.min + (difficulty - 1) * (gauge.rate * 60)
+	if(value > gauge.max) value = gauge.max
+	return value
+}
+
+function isOutsideScreen(pos) {
+	return pos.y < 0
+		|| pos.y > G.HEIGHT
+		|| pos.x < 0
+		|| pos.x > G.WIDTH
 }
