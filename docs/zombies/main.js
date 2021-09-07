@@ -42,12 +42,16 @@ const G = {
 	Z_SPD_RATE: 0.3,
 	Z_SPAWN_DISTANCE: 0.8,
 	Z_SPAWN_RATE: 30,
+	Z_SPAWN_AGGRO_PROBA_MIN: 0.0,
+	Z_SPAWN_AGGRO_PROBA_MAX: 0.2,
+	Z_SPAWN_AGGRO_PROBA_RATE: 0.04,
 
 	AGGRO_MIN: 0.1,
 	AGGRO_MAX: 0.5,
 	AGGRO_UPDATE_RATE: 0.01,
 	AGGRO_COOLDOWN_RATE: 0.01,
 	AGGRO_SHOOT_INCR: 0.2,
+	AGGRO_SOUND: "jump",
 }
 
 options = {
@@ -118,7 +122,15 @@ function generateZombie() {
 	const distance = rnd(G.Z_SPAWN_DISTANCE, 1.0) * (G.WIDTH / 2)
 	let pos = vec(distance, 0).rotate(angle).add(G.WIDTH * 0.5, G.HEIGHT * 0.5)
 	pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
-	return { pos: pos, is_aggro: false }
+	const is_aggro = rnd(1) < spawn_aggro_proba()
+	if (is_aggro) play(G.AGGRO_SOUND)
+	return { pos: pos, is_aggro: is_aggro }
+}
+
+function spawn_aggro_proba() {
+	let p = G.Z_SPAWN_AGGRO_PROBA_MIN + (difficulty - 1) * G.Z_SPAWN_AGGRO_PROBA_RATE
+	if(p > G.Z_SPAWN_AGGRO_PROBA_MAX) p = G.Z_SPAWN_AGGRO_PROBA_MAX
+	return p
 }
 
 function aggro_distance(aggroZone) {
@@ -144,24 +156,13 @@ function zombie_speed() {
 function update() {
     // The init function running at startup
 	if (!ticks) {
-        zombies = times(G.Z_INIT_NB, generateZombie)
-
-		player = {
-            pos: vec(G.WIDTH * 0.5, G.HEIGHT * 0.5),
-            firingCooldown: G.PLAYER_FIRE_RATE,
-			burstTicks: 0,
-			aggroZone: {
-				currentSize: G.AGGRO_MIN,
-				targetSize: G.AGGRO_MIN,
-			}
-        }
-
-        fBullets = []
+        init()
 	}
 
     // Debug
 	color("light_black")
 	text(zombies.length.toString(), 3, 10)
+	// text(spawn_aggro_proba().toString(), 3, 20)
 
 	// Player
 	update_player()
@@ -171,6 +172,22 @@ function update() {
 
 	// Zombies
 	update_zombies()
+}
+
+function init() {
+	zombies = times(G.Z_INIT_NB, generateZombie)
+
+	player = {
+		pos: vec(G.WIDTH * 0.5, G.HEIGHT * 0.5),
+		firingCooldown: G.PLAYER_FIRE_RATE,
+		burstTicks: 0,
+		aggroZone: {
+			currentSize: G.AGGRO_MIN,
+			targetSize: G.AGGRO_MIN,
+		}
+	}
+
+	fBullets = []
 }
 
 function update_player() {
@@ -282,7 +299,7 @@ function update_zombies() {
 	remove(zombies, (z) => {
 		if(player.pos.distanceTo(z.pos) < aggro_dist && ! z.is_aggro) {
 			z.is_aggro = true
-			play("lucky")
+			play(G.AGGRO_SOUND)
 		}
 
 		if(z.is_aggro) {
