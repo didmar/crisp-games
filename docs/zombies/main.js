@@ -2,6 +2,8 @@ title = "ZOMBIES"
 
 description = `
 Shoot zombies to survive
+[Tap] Single shot
+[Hold] Burst shot
 `
 
 characters = [
@@ -27,7 +29,9 @@ const G = {
 	WIDTH: 150,
 	HEIGHT: 150,
 
-	PLAYER_FIRE_RATE: 10,
+	PLAYER_FIRE_RATE: 30,
+	PLAYER_SHOW_LASER: true,
+	LONGPRESS_THRESHOLD: 20,
 
     FBULLET_SPEED: 3,
 
@@ -47,7 +51,12 @@ const G = {
 }
 
 options = {
-	viewSize: {x: G.WIDTH, y: G.HEIGHT}
+	viewSize: {x: G.WIDTH, y: G.HEIGHT},
+	isReplayEnabled: true,
+	theme: "crt",
+	// isCapturing: true,
+	// isCapturingGameCanvasOnly: true,
+	// captureCanvasScale: 2,
 }
 
 /**
@@ -73,6 +82,7 @@ let zombies
  * @typedef {{
  * pos: Vector,
  * firingCooldown: number
+ * burstTicks: number
  * aggroZone: AggroZone
  * }} Player
  */
@@ -93,6 +103,8 @@ let player
  * @type { FBullet [] }
  */
 let fBullets
+
+let lastJustPressed
 
 function isOutsideScreen(pos) {
 	return pos.y < 0
@@ -137,6 +149,7 @@ function update() {
 		player = {
             pos: vec(G.WIDTH * 0.5, G.HEIGHT * 0.5),
             firingCooldown: G.PLAYER_FIRE_RATE,
+			burstTicks: 0,
 			aggroZone: {
 				currentSize: G.AGGRO_MIN,
 				targetSize: G.AGGRO_MIN,
@@ -150,58 +163,124 @@ function update() {
 	color("light_black")
 	text(zombies.length.toString(), 3, 10)
 
+	// Player
+	update_player()
+
+	// Bullets
+	update_bullets()
+
+	// Zombies
+	update_zombies()
+}
+
+function update_player() {
 	// AggroZone
     color("light_black")
 	update_aggro_zone(player.aggroZone)
 	const aggro_dist = aggro_distance(player.aggroZone)
 	arc(player.pos.x, player.pos.y, aggro_dist, 1, 0, 2*PI)
 
-    // Player
-	player.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
+	// player.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
+
 	player.firingCooldown--
-	if (player.firingCooldown <= 0 && input.isJustPressed) {
-		let dir = player.pos.angleTo(input.pos)
-		fBullets.push({
-			pos: vec(player.pos.x, player.pos.y),
-			dir: dir,
-		})
-		player.firingCooldown = G.PLAYER_FIRE_RATE
-		player.aggroZone.targetSize += G.AGGRO_SHOOT_INCR
+	player.burstTicks--
 
-		color("light_black")
-		particle(
-			player.pos.x,
-			player.pos.y,
-			4,
-			1,
-			dir,
-			PI/4
-		)
-		play("laser")
+	let isPassingThreshold = ticks - lastJustPressed > G.LONGPRESS_THRESHOLD;
+
+    if (input.isJustPressed) {
+		lastJustPressed = ticks;
+	} else if (input.isPressed) {
+        
+	} else if (input.isJustReleased) {
+		if (isPassingThreshold) startBurst()
+		else fireSingle()
 	}
-	color ("black")
+
+	if (player.burstTicks > 0) {
+		if(player.burstTicks % 10 == 0) {
+			fireBurst()
+		}
+	}
+
+	color(player.firingCooldown <= 0 ? "black" : "light_black")
 	char("a", player.pos)
+
 	// Laser
-	color ("light_red")
-	const p = vec(G.WIDTH * 2, 0).rotate(player.pos.angleTo(input.pos))
-	line(player.pos.x, player.pos.y, player.pos.x + p.x, player.pos.y + p.y, 1)
+	if(G.PLAYER_SHOW_LASER) {
+		color ("light_red")
+		const p = vec(G.WIDTH * 2, 0).rotate(player.pos.angleTo(input.pos))
+		line(player.pos.x, player.pos.y, player.pos.x + p.x, player.pos.y + p.y, 1)
+	}
+}
 
+function fireSingle() {
+	if (player.firingCooldown > 0) return
 
-	// Bullets
+	let dir = player.pos.angleTo(input.pos)
+	fBullets.push({
+		pos: vec(player.pos.x, player.pos.y),
+		dir: dir,
+	})
+	player.firingCooldown = G.PLAYER_FIRE_RATE
+	player.aggroZone.targetSize += G.AGGRO_SHOOT_INCR
+
+	color("light_black")
+	particle(
+		player.pos.x,
+		player.pos.y,
+		4,
+		1,
+		dir,
+		PI/4
+	)
+	play("laser")
+}
+
+function startBurst() {
+	if (player.firingCooldown <= 0) {
+		player.burstTicks = 30
+		player.firingCooldown = player.burstTicks + G.PLAYER_FIRE_RATE * 3
+	}
+}
+
+function fireBurst() {
+	let dir = player.pos.angleTo(input.pos)
+	fBullets.push({
+		pos: vec(player.pos.x, player.pos.y),
+		dir: dir + rnds(PI/16),
+	})
+	player.firingCooldown = G.PLAYER_FIRE_RATE
+	player.aggroZone.targetSize += G.AGGRO_SHOOT_INCR
+
+	color("red")
+	particle(
+		player.pos.x,
+		player.pos.y,
+		4,
+		1,
+		dir,
+		PI/4
+	)
+	play("laser")
+}
+
+function update_bullets() {
 	remove(fBullets, (fb) => {
 		let upd = vec(G.FBULLET_SPEED, 0).rotate(fb.dir)
 		fb.pos.x += upd.x
 		fb.pos.y += upd.y
 		
 		color("yellow")
-		box(fb.pos, 2)
+		bar(fb.pos.x, fb.pos.y, 3, 2, fb.dir)
 
 		return isOutsideScreen(fb.pos)
 	})
+}
 
-	// Zombies
+function update_zombies() {
+	const aggro_dist = aggro_distance(player.aggroZone)
 	remove(zombies, (z) => {
-		if(player.pos.distanceTo(z.pos) < aggro_dist) {
+		if(player.pos.distanceTo(z.pos) < aggro_dist && ! z.is_aggro) {
 			z.is_aggro = true
 			play("lucky")
 		}
@@ -236,10 +315,4 @@ function update() {
 	if (ticks % G.Z_SPAWN_RATE == 0 && zombies.length < G.Z_MAX_NB) {
 		zombies.push(generateZombie())
     }
-
-    remove(fBullets, (fb) => {
-        color("yellow")
-		bar(fb.pos.x, fb.pos.y, 3, 2, fb.dir)
-		return isOutsideScreen(fb.pos)
-    })
 }
