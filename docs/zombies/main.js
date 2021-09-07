@@ -69,8 +69,8 @@ const G = {
 	 * @type Gauge
 	 */
 	Z_SPAWN_AGGRO_PROBA: {
-		min: 0.0,
-	    max: 0.2,
+		min: 0.05,
+	    max: 0.25,
 	    rate: 0.0007, // reach max after ~5 min
 	},
 
