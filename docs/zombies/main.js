@@ -52,7 +52,7 @@ const G = {
 
     BULLET_SPEED: 3,
 
-	Z_INIT_NB: 5,
+	Z_INIT_NB: 15,
 	Z_MAX_NB: 50,
 	Z_SPD: {
 		min: 0.1,
@@ -71,7 +71,7 @@ const G = {
 	    rate: 0.0007, // reach max after ~5 min
 	},
 
-	AGGRO_MIN: 0.1,
+	AGGRO_MIN: 0.1, // % of the screen width
 	AGGRO_MAX: 0.5,
 	AGGRO_UPDATE_RATE: 0.01,
 	AGGRO_COOLDOWN_RATE: 0.01,
