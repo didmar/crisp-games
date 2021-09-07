@@ -52,6 +52,10 @@ const G = {
 
 	NIGHT_TIME: true,
 	NIGHT_FOV: PI/4,
+	FLASHLIGHT_GLITCH_MIN: 10,
+	FLASHLIGHT_GLITCH_MAX: 40,
+	FLASHLIGHT_GLITCH_REST_MIN: 60 * 2,
+	FLASHLIGHT_GLITCH_REST_MAX: 60 * 6,
 
     BULLET_SPEED: 3,
 
@@ -150,6 +154,11 @@ let bullets
 
 let lastJustPressed
 
+let revealEverything
+
+let flashlightOK
+let flashlightGlitchTicks
+
 function update() {
     // The init function running at startup
 	if (!ticks) {
@@ -161,7 +170,7 @@ function update() {
 	text(zombies.length.toString(), 3, 10)
 	// text(spawn_aggro_proba().toString(), 3, 20)
 
-	// Player
+    // Player
 	update_player()
 
 	// Bullets
@@ -185,6 +194,11 @@ function init() {
 	}
 
 	bullets = []
+
+	revealEverything = false
+
+    flashlightOK = false
+    flashlightGlitchTicks = 0
 }
 
 
@@ -195,9 +209,7 @@ function update_player() {
 	const aggro_dist = aggro_distance(player.aggroZone)
 	arc(player.pos.x, player.pos.y, aggro_dist, 1, 0, 2*PI)
 
-	// player.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
-
-	player.firingCooldown--
+    player.firingCooldown--
 	player.burstTicks--
 
 	let isPassingThreshold = ticks - lastJustPressed > G.LONGPRESS_THRESHOLD;
@@ -223,7 +235,24 @@ function update_player() {
 	const aimAngle = player.pos.angleTo(input.pos)
 
 	// Flashlight
-	if(G.NIGHT_TIME) {
+
+	flashlightGlitchTicks--
+	if(flashlightGlitchTicks <= 0) {
+		if(flashlightOK) {
+			flashlightGlitchTicks = rnd(
+				G.FLASHLIGHT_GLITCH_MIN,
+				G.FLASHLIGHT_GLITCH_MAX
+			)
+		} else {
+			flashlightGlitchTicks = rnd(
+				G.FLASHLIGHT_GLITCH_REST_MIN,
+				G.FLASHLIGHT_GLITCH_REST_MAX,
+			)
+		}
+		flashlightOK = ! flashlightOK
+	}
+
+	if(G.NIGHT_TIME && flashlightOK) {
 		color("light_yellow")
 		if(floor(ticks / 1) % 2 == 0) {
 		for (let dist = 0; dist < G.WIDTH / 2; dist += 10) {
@@ -238,7 +267,9 @@ function update_player() {
 		}
 		}
 	}
+
 	// Laser
+
 	if(G.PLAYER_SHOW_LASER) {
 		color ("light_red")
 		const p = vec(0, 0).addWithAngle(aimAngle, G.WIDTH * 2)
@@ -286,7 +317,7 @@ function fireBurst() {
 	player.firingCooldown = G.PLAYER_FIRE_RATE
 	player.aggroZone.targetSize += G.AGGRO_SHOOT_INCR
 
-	color("red")
+	color("light_black")
 	particle(
 		player.pos.x,
 		player.pos.y,
@@ -331,8 +362,8 @@ function update_zombies() {
 
         const isCollidingWithBullets = col.isColliding.rect.yellow
         if (isCollidingWithBullets) {
-            color("red")
-            particle(z.pos)
+			color("red")
+			particle(z.pos)
 			play(G.BULLET_HIT_SOUND)
 			addScore(1)
         }
@@ -340,7 +371,8 @@ function update_zombies() {
 		const isCollidingWithPlayer = col.isColliding.char.a
 		if (isCollidingWithPlayer) {
 			// Show all the zombies before Game over
-			zombies.forEach((z) => render_zombie(z, true))
+			revealEverything = true
+			zombies.forEach((z) => render_zombie(z))
 			end()
 		}
         
@@ -352,14 +384,14 @@ function update_zombies() {
     }
 }
 
-function render_zombie(z, forceVisible=false) {
+function render_zombie(z) {
 	if(z.is_aggro) {
 		color("light_red")
 	} else {
 		color("green")
 	}
 
-	if(! (is_visible(z.pos) || forceVisible)) {
+	if(! is_visible(z.pos)) {
 		color("white")  // will appear black on black background
 	}
 
@@ -370,7 +402,8 @@ function render_zombie(z, forceVisible=false) {
 }
 
 function is_visible(pos) {
-	if(! G.NIGHT_TIME) return true
+	if(revealEverything || ! G.NIGHT_TIME) return true
+	if(! flashlightOK) return false
 	let objAngle = player.pos.angleTo(pos)
 	const aimAngle = player.pos.angleTo(input.pos)
 	return abs(aimAngle - objAngle) < G.NIGHT_FOV
