@@ -50,6 +50,9 @@ const G = {
 	PLAYER_SHOW_LASER: true,
 	LONGPRESS_THRESHOLD: 20,
 
+	NIGHT_TIME: true,
+	NIGHT_FOV: PI/4,
+
     BULLET_SPEED: 3,
 
 	Z_INIT_NB: 15,
@@ -217,11 +220,28 @@ function update_player() {
 	color(player.firingCooldown <= 0 ? "black" : "light_black")
 	char("a", player.pos)
 
+	const aimAngle = player.pos.angleTo(input.pos)
+
+	// Flashlight
+	if(G.NIGHT_TIME) {
+		color("light_yellow")
+		if(floor(ticks / 1) % 2 == 0) {
+		for (let dist = 0; dist < G.WIDTH / 2; dist += 10) {
+			arc(
+				player.pos.x,
+				player.pos.y,
+				dist,
+				1,
+				aimAngle - G.NIGHT_FOV * 0.5,
+				aimAngle + G.NIGHT_FOV * 0.5
+			)
+		}
+		}
+	}
 	// Laser
 	if(G.PLAYER_SHOW_LASER) {
 		color ("light_red")
-		const angle = player.pos.angleTo(input.pos)
-		const p = vec(0, 0).addWithAngle(angle, G.WIDTH * 2)
+		const p = vec(0, 0).addWithAngle(aimAngle, G.WIDTH * 2)
 		line(player.pos.x, player.pos.y, player.pos.x + p.x, player.pos.y + p.y, 1)
 	}
 }
@@ -309,6 +329,10 @@ function update_zombies() {
 		}
         z.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
 
+		if(! is_visible(z.pos)) {
+			color("white")  // will appear black on black background
+		}
+
 		const offset = floor(ticks / (spd * 300)) % 2
 		const col = char(addWithCharCode("b", offset), z.pos)
 
@@ -329,6 +353,13 @@ function update_zombies() {
 	if (ticks % G.Z_SPAWN_RATE == 0 && zombies.length < G.Z_MAX_NB) {
 		zombies.push(generateZombie())
     }
+}
+
+function is_visible(pos) {
+	if(! G.NIGHT_TIME) return true
+	let objAngle = player.pos.angleTo(pos)
+	const aimAngle = player.pos.angleTo(input.pos)
+	return abs(aimAngle - objAngle) < G.NIGHT_FOV
 }
 
 function generateZombie() {
