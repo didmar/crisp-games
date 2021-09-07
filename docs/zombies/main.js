@@ -322,19 +322,12 @@ function update_zombies() {
 		if(z.is_aggro) {
 			const dir = z.pos.angleTo(player.pos)
 			z.pos.addWithAngle(dir, spd)
-			color("light_red")
 		} else {
 			z.pos.addWithAngle(rnd(2*PI), spd)
-			color("green")
 		}
         z.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
 
-		if(! is_visible(z.pos)) {
-			color("white")  // will appear black on black background
-		}
-
-		const offset = floor(ticks / (spd * 300)) % 2
-		const col = char(addWithCharCode("b", offset), z.pos)
+		const col = render_zombie(z)
 
         const isCollidingWithBullets = col.isColliding.rect.yellow
         if (isCollidingWithBullets) {
@@ -345,7 +338,11 @@ function update_zombies() {
         }
 
 		const isCollidingWithPlayer = col.isColliding.char.a
-		if (isCollidingWithPlayer) end()
+		if (isCollidingWithPlayer) {
+			// Show all the zombies before Game over
+			zombies.forEach((z) => render_zombie(z, true))
+			end()
+		}
         
         // Also another condition to remove the object
         return (isCollidingWithBullets || isOutsideScreen(z.pos))
@@ -353,6 +350,23 @@ function update_zombies() {
 	if (ticks % G.Z_SPAWN_RATE == 0 && zombies.length < G.Z_MAX_NB) {
 		zombies.push(generateZombie())
     }
+}
+
+function render_zombie(z, forceVisible=false) {
+	if(z.is_aggro) {
+		color("light_red")
+	} else {
+		color("green")
+	}
+
+	if(! (is_visible(z.pos) || forceVisible)) {
+		color("white")  // will appear black on black background
+	}
+
+	const spd = zombie_speed()
+	const offset = floor(ticks / (spd * 300)) % 2
+	const col = char(addWithCharCode("b", offset), z.pos)
+	return col
 }
 
 function is_visible(pos) {
