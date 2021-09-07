@@ -16,9 +16,17 @@ llllll
 ll  ll
 `,
 `
-  ll 
- l  l
-  ll
+ lll
+l l l
+ lll
+llllll
+ llll
+ll  ll
+`,
+`
+  lll 
+ l l l
+  lll
 llllll
  llll
 ll  ll
@@ -176,6 +184,7 @@ function init() {
 	bullets = []
 }
 
+
 function update_player() {
 	// AggroZone
     color("light_black")
@@ -216,6 +225,7 @@ function update_player() {
 		line(player.pos.x, player.pos.y, player.pos.x + p.x, player.pos.y + p.y, 1)
 	}
 }
+
 
 function fireSingle() {
 	if (player.firingCooldown > 0) return
@@ -279,6 +289,7 @@ function update_bullets() {
 	})
 }
 
+
 function update_zombies() {
 	const spd = zombie_speed()
 	const aggro_dist = aggro_distance(player.aggroZone)
@@ -298,7 +309,8 @@ function update_zombies() {
 		}
         z.pos.clamp(0, G.WIDTH, 0, G.HEIGHT)
 
-		const col = char("b", z.pos)
+		const offset = floor(ticks / (spd * 300)) % 2
+		const col = char(addWithCharCode("b", offset), z.pos)
 
         const isCollidingWithBullets = col.isColliding.rect.yellow
         if (isCollidingWithBullets) {
@@ -350,6 +362,7 @@ function update_aggro_zone(aggroZone) {
 function zombie_speed() {
 	return scale_with_difficulty(G.Z_SPD)
 }
+
 
 // Generic utils
 
